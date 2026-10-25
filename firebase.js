@@ -1,0 +1,43 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
+import { getFirestore, collection, doc, query, orderBy, limit, onSnapshot, getDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
+
+const app = initializeApp({
+  apiKey: 'AIzaSyB-opp6w-TfZCvfHNmXc_o3CMR6mjOkvdQ',
+  authDomain: 'qirat-6f86e.firebaseapp.com',
+  projectId: 'qirat-6f86e',
+  storageBucket: 'qirat-6f86e.firebasestorage.app',
+  messagingSenderId: '231672378816',
+  appId: '1:231672378816:web:fce40b688e7ad514b28425'
+});
+const auth = getAuth(app);
+const db = getFirestore(app);
+const announcements = collection(db, 'announcements');
+const validId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+export const watchAuth = callback => onAuthStateChanged(auth, callback);
+export const signIn = () => signInWithPopup(auth, new GoogleAuthProvider());
+export const signOut = () => firebaseSignOut(auth);
+export const watchAnnouncements = (callback, onError) => onSnapshot(
+  query(announcements, orderBy('datetime', 'desc'), limit(500)),
+  snapshot => callback(snapshot.docs.filter(d => validId(d.id)).map(d => ({ ...d.data(), id: d.id }))),
+  onError
+);
+export async function getAnnouncement(id) {
+  if (!validId(id)) return null;
+  const snapshot = await getDoc(doc(announcements, id));
+  return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null;
+}
+export async function saveAnnouncement(entry, existing = false) {
+  if (!auth.currentUser || auth.currentUser.uid !== entry.ownerUid || !validId(entry.id)) throw new Error('Invalid announcement owner or ID');
+  const ref = doc(announcements, entry.id);
+  const value = { ...entry, updatedAt: serverTimestamp() };
+  if (existing) return updateDoc(ref, value);
+  return runTransaction(db, async transaction => {
+    if ((await transaction.get(ref)).exists()) throw new Error('Announcement already exists');
+    transaction.set(ref, { ...value, createdAt: serverTimestamp() });
+  });
+}
+export async function deleteAnnouncement(id) {
+  if (!auth.currentUser || !validId(id)) throw new Error('Sign in first');
+  return deleteDoc(doc(announcements, id));
+}
