@@ -1,6 +1,6 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
-import { getFirestore, collection, doc, query, orderBy, limit, onSnapshot, getDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
+import { getFirestore, collection, doc, query, orderBy, limit, startAfter, getDocs, onSnapshot, getDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 
 const app = initializeApp({
   apiKey: 'AIzaSyB-opp6w-TfZCvfHNmXc_o3CMR6mjOkvdQ',
@@ -41,3 +41,19 @@ export async function deleteAnnouncement(id) {
   if (!auth.currentUser || !validId(id)) throw new Error('Sign in first');
   return deleteDoc(doc(announcements, id));
 }
+
+export const isAdministrator = user => !!user && user.emailVerified === true && user.email === 'ali_alsaffar@uomosul.edu.iq' && user.providerData?.some(p => p.providerId === 'google.com');
+export async function getAdminAnnouncements(cursor = null) {
+  if (!isAdministrator(auth.currentUser)) throw new Error('Administrator access required');
+  const constraints = [orderBy('datetime', 'desc')];
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(51));
+  const snapshot = await getDocs(query(announcements, ...constraints));
+  const page = snapshot.docs.slice(0, 50);
+  return {
+    items: page.filter(d => validId(d.id)).map(d => ({ ...d.data(), id: d.id })),
+    cursor: page.length ? page[page.length - 1] : null,
+    hasMore: snapshot.docs.length > 50
+  };
+}
+

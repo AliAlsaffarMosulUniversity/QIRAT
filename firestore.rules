@@ -4,6 +4,10 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email_verified == true
+        && request.auth.token.email == 'ali_alsaffar@uomosul.edu.iq';
+    }
     function validAnnouncement(id) {
       let d = request.resource.data;
       return d.keys().hasAll(['id','name','gender','city','area','mosque','datetime','map','notes','status','ownerUid','createdAt','updatedAt'])
@@ -28,7 +32,8 @@ service cloud.firestore {
       allow create: if signedIn() && validAnnouncement(id) && request.resource.data.createdAt == request.time;
       allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
         && validAnnouncement(id) && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
   }
 }
+
