@@ -46,9 +46,10 @@ export const isAdministrator = user => !!user && user.emailVerified === true && 
 export async function telegramChannelRequest(body) {
   if (!isAdministrator(auth.currentUser)) throw new Error('administrator_required');
   const token = await auth.currentUser.getIdToken();
-  const response = await fetch('https://qirat-telegram-bot.anaqatal-rafidain.workers.dev/channels', {
-    method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify(body)
-  });
+  let payload,headers={Authorization:'Bearer '+token};
+  if(body.photo instanceof Blob){const {photo,...fields}=body;payload=new FormData();payload.append('payload',JSON.stringify(fields));payload.append('photo',photo,'announcement.jpg');}
+  else {payload=JSON.stringify(body);headers['Content-Type']='application/json';}
+  const response = await fetch('https://qirat-telegram-bot.anaqatal-rafidain.workers.dev/channels', {method:'POST',headers,body:payload});
   let data; try { data=await response.json(); } catch { throw new Error('channels_unavailable'); }
   if (!response.ok) throw new Error(data.error || 'channels_unavailable');
   return data;

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { channelAction, channelId, rememberChannel, TEST_TEXT } from './channels.mjs';
+import { channelAction, channelId, rememberChannel, TEST_TEXT,validatePhoto } from './channels.mjs';
+import { chooseChannel } from '../telegram-channels.js';
 import { channelsRequest } from './worker.mjs';
 function memoryStore() {
   const docs=new Map();let version=0;
@@ -20,6 +21,7 @@ const api=async(method,body)=>{
   if(method==='getChatMember')return body.user_id===123?{status:owner?'creator':'member'}:{status:'administrator',can_post_messages:rights,can_edit_messages:rights,can_delete_messages:rights};
   if(timeout)throw new Error('secret-token-must-not-escape');
   if(method==='sendMessage')return {message_id:++nextMessage,chat:{id:Number(body.chat_id)}};
+  if(method==='sendPhoto')return {message_id:++nextMessage,chat:{id:Number(body.chat_id)},photo:[{file_id:'saved-photo-id'}]};
   return true;
 };
 const call=(action,extra={})=>channelAction({action,chat_id:id,...extra},env,store,api);
@@ -83,5 +85,53 @@ user={...admin,emailVerified:false};assert.equal((await channelsRequest(req({act
 user=admin;
 const failure=await channelsRequest(req({action:'verify',chat_id:id}),env,{...deps,api:async()=>{throw new Error('secret-token-must-not-escape')}});
 assert.equal(failure.status,503);assert(!(await failure.text()).includes('secret-token'));
-assert.equal((await channelsRequest(req({action:'list',padding:'x'.repeat(2100)}),env,deps)).status,413);
+assert.equal((await channelsRequest(req({action:'list',padding:'x'.repeat(17000)}),env,deps)).status,413);
+assert.equal((await call('list')).default_chat_id,id);
+await call('set-default',{chat_id:second});
+assert.equal((await call('list')).default_chat_id,second);
+assert.equal(chooseChannel((await call('list')).channels,second),second);
+assert.equal(chooseChannel((await call('list')).channels,''),id);
+assert.equal(chooseChannel([],second),'');
+await call('set-default');
+const png=new Blob([new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0])],{type:'image/png'});
+assert.equal((await validatePhoto(png)).type,'image/png');
+await assert.rejects(()=>validatePhoto(new Blob(['<svg/>'],{type:'image/png'})),/invalid_photo/);
+await assert.rejects(()=>validatePhoto(new Blob([new Uint8Array(5*1024*1024+1)])),/invalid_photo/);
+await assert.rejects(()=>call('compose-publish',{delivery_id:crypto.randomUUID(),text:'x'.repeat(1025),photo:png}),/caption_too_long/);
+await assert.rejects(()=>call('compose-publish',{delivery_id:crypto.randomUUID(),text:' '}),/text_required/);
+const photoId=crypto.randomUUID(),caption='اختبار صورة ونص محلي فقط';
+const photoPost=(await call('compose-publish',{delivery_id:photoId,text:caption,photo:png})).delivery;
+assert.equal(photoPost.kind,'compose');assert.equal(photoPost.mediaType,'photo');assert.equal(photoPost.photo_file_id,'saved-photo-id');
+assert.equal(calls.filter(c=>c.method==='sendPhoto').at(-1).body.caption,caption);
+const sends=calls.filter(c=>c.method==='sendPhoto').length;
+await call('compose-publish',{delivery_id:photoId,text:caption,photo:png});
+assert.equal(calls.filter(c=>c.method==='sendPhoto').length,sends);
+await call('compose-edit',{delivery_id:photoId,text:'نص صورة معدّل'});
+assert.equal(calls.filter(c=>c.method==='editMessageCaption').at(-1).body.message_id,photoPost.message_id);
+assert.equal(calls.filter(c=>c.method==='editMessageCaption').at(-1).body.caption,'نص صورة معدّل');
+await call('compose-edit',{delivery_id:photoId,text:'نص صورة معدّل',photo:png});
+const replacement=calls.filter(c=>c.method==='editMessageMedia').at(-1);
+assert.equal(replacement.body.message_id,photoPost.message_id);assert.equal(JSON.parse(replacement.body.media).caption,'نص صورة معدّل');assert(replacement.body.photo instanceof Blob);
+await assert.rejects(()=>call('edit',{delivery_id:photoId}),/delivery_type_mismatch/);
+await call('compose-delete',{delivery_id:photoId});
+assert.equal((await call('deliveries')).deliveries.find(d=>d.delivery_id===photoId).state,'deleted');
+const directId=crypto.randomUUID();await call('compose-publish',{delivery_id:directId,text:'نص بلا صورة'});
+await call('compose-edit',{delivery_id:directId,text:'نص معدّل بلا صورة'});
+assert.equal(calls.filter(c=>c.method==='editMessageText').at(-1).body.text,'نص معدّل بلا صورة');
+// Exercise the actual multipart request parser AND Telegram upload adapter with no network.
+const originalFetch=globalThis.fetch;let uploaded=false;
+globalThis.fetch=async(url,options)=>{
+  if(!url.endsWith('/sendPhoto'))return Response.json({ok:true,result:await api(url.split('/').at(-1),JSON.parse(options.body))});
+  assert.equal(url,'https://api.telegram.org/botfake/sendPhoto');
+  assert(options.body instanceof FormData);assert.equal(options.headers['Content-Type'],undefined);
+  assert.equal(options.body.get('chat_id'),id);assert.equal(options.body.get('caption'),TEST_TEXT);
+  assert(options.body.get('photo') instanceof Blob);uploaded=true;
+  return Response.json({ok:true,result:{message_id:999,chat:{id:Number(id)},photo:[{file_id:'multipart-photo'}]}});
+};
+try{
+  const form=new FormData();form.append('payload',JSON.stringify({action:'compose-publish',chat_id:id,delivery_id:crypto.randomUUID(),text:TEST_TEXT}));form.append('photo',png,'test.png');
+  const response=await channelsRequest(new Request('https://bridge.example/channels',{method:'POST',headers:{Origin:'https://qirat.example',Authorization:'Bearer fake'},body:form}),env,{lookupUser:async()=>admin,makeStore:async()=>store});
+  assert.equal(response.status,200);assert(uploaded);assert.equal((await response.json()).delivery.photo_file_id,'multipart-photo');
+}finally{globalThis.fetch=originalFetch;}
 console.log('PASS: channel discovery, numeric IDs, admin authentication, permissions, multiple channels, stored message IDs, test and real post/edit/delete, concurrency, duplicate prevention, crash ambiguity and secret-safe errors (all mocked; no live messages)');
+console.log('PASS: permanent default channel, text/photo composition, caption editing on the same message, image validation, size/caption bounds, multipart upload adapter and duplicate protection');

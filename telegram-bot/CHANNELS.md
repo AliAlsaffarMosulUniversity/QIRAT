@@ -2,6 +2,14 @@
 
 The application administrator can now open **لوحة المدير → قنوات Telegram**. The existing bot still accepts announcements into QIRAT; channel publication is a separate, explicit administrator action. WhatsApp and Messenger are deferred.
 
+## Saved channel and direct text/photo composer
+
+The administrator can also use the **إرسال إلى Telegram** shortcut. Connected channels are retained on the server. The publishing default is stored in `_qiratTelegramSettings/publishing` and is used across devices and sign-ins. The first connected channel becomes the default; for channels connected before this feature, the UI selects the first saved enabled channel automatically. **حفظ هذه القناة كافتراضية** persists a different selection. Adding a new channel is under collapsed settings, so an existing channel ID never needs to be re-entered to publish.
+
+The direct composer sends the administrator's complete text and optional image straight to the selected Telegram channel. It does not invent structured funeral details or create a separate funeral entry on the public QIRAT list. The explicit submit button sends once and saves the resulting message ID. Browser image uploads accept JPEG/PNG/WebP up to 15 MiB, resize to at most 1600 pixels on the long edge and encode JPEG. The server checks actual file signatures, restricts the outgoing image to 5 MiB, authenticates the administrator before reading the upload, and caps the entire multipart body at 6 MiB. Uploaded image bytes are passed to Telegram rather than stored in Firestore; the ledger stores Telegram's file ID.
+
+Telegram's photo caption limit is 1024 characters; text-only messages allow 4096. The composer shows a character counter. **تعديل الرسالة** loads the saved text into the editor. **حفظ تعديل الرسالة** edits that same message using editMessageCaption for photo captions, editMessageMedia when replacing an existing photo, or editMessageText for text-only messages. A text-only post cannot be converted into a photo post through this editor. Deletion uses a two-click confirmation within the application instead of a native browser popup.
+
 ## Deployment
 
 1. Deploy the complete `telegram-bot` directory using its `wrangler.jsonc` (`npx wrangler deploy` from that directory). `worker.mjs` now imports `channels.mjs`; pasting only worker.mjs into an inline editor is insufficient.

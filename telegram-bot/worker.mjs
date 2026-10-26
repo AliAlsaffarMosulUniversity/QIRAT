@@ -113,7 +113,12 @@ class Store {
   put(path,data,previous,stamps=[]){return {update:{name:this.root+'/'+path,fields:encodeFields(data)},currentDocument:previous?{updateTime:previous.updateTime}:{exists:false},...(stamps.length?{updateTransforms:stamps.map(fieldPath=>({fieldPath,setToServerValue:'REQUEST_TIME'}))}:{})};}
   async commit(writes){const r=await fetch(`https://firestore.googleapis.com/v1/${this.root}:commit`,{method:'POST',headers:{Authorization:'Bearer '+this.token,'Content-Type':'application/json'},body:JSON.stringify({writes}),signal:AbortSignal.timeout(12000)});if([409,412].includes(r.status))return false;if(!r.ok)throw new Error('firestore_write_failed');return true;}
 }
-async function telegram(env,method,body){const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw new Error('telegram_request_failed');const d=await r.json();if(!d.ok)throw new Error('telegram_request_failed');return d.result;}
+async function telegram(env,method,body){
+  let payload=JSON.stringify(body),headers={'Content-Type':'application/json'};
+  if(body.photo instanceof Blob){payload=new FormData();for(const [key,value]of Object.entries(body))payload.append(key,value instanceof Blob?value:String(value),...(value instanceof Blob?['announcement.'+(value.type==='image/png'?'png':value.type==='image/webp'?'webp':'jpg')]:[]));headers={};}
+  const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',headers,body:payload,signal:AbortSignal.timeout(method==='sendPhoto'?25000:12000)});
+  if(!r.ok)throw new Error('telegram_request_failed');const d=await r.json();if(!d.ok)throw new Error('telegram_request_failed');return d.result;
+}
 const send = (env,id,text) => telegram(env,'sendMessage',{chat_id:id,text,link_preview_options:{is_disabled:true}});
 const link = (env,id) => (env.APP_URL || 'https://alialsaffarmosuluniversity.github.io/QIRAT/').split('#')[0]+'#announcement='+id;
 async function fingerprint(draft){const text=JSON.stringify([draft.name,draft.gender,draft.city,draft.area,draft.mosque,draft.date,draft.prayer,draft.cemetery]);return b64url(await crypto.subtle.digest('SHA-256',encoder.encode(text)));}
@@ -232,9 +237,21 @@ export async function channelsRequest(request,env,dependencies={}){
     });
     const user=await lookupUser(token);
     if(!user?.localId||!user.emailVerified||user.email!=='ali_alsaffar@uomosul.edu.iq'||!user.providerUserInfo?.some(p=>p.providerId==='google.com'))return respond({error:'administrator_required'},403);
-    if(Number(request.headers.get('Content-Length')||0)>2048)return respond({error:'too_large'},413);
-    const raw=await request.text();if(raw.length>2048)return respond({error:'too_large'},413);
-    let body;try{body=JSON.parse(raw)}catch{return respond({error:'invalid_request'},400);}
+    const multipart=/^multipart\/form-data\b/i.test(request.headers.get('Content-Type')||'');
+    const max=multipart?6*1024*1024:16000;
+    if(Number(request.headers.get('Content-Length')||0)>max)return respond({error:'too_large'},413);
+    const reader=request.body?.getReader(),chunks=[];let size=0;
+    if(reader){while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>max){await reader.cancel();return respond({error:'too_large'},413);}chunks.push(value);}}
+    const bytes=new Blob(chunks);
+    let body;try{
+      if(multipart){
+        const form=await new Response(bytes,{headers:{'Content-Type':request.headers.get('Content-Type')}}).formData();
+        const payload=form.get('payload');if(typeof payload!=='string'||payload.length>8000)return respond({error:'invalid_request'},400);
+        body=JSON.parse(payload);const photo=form.get('photo');
+        if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'invalid_request'},400);
+        if(photo!==null){if(!(photo instanceof Blob))return respond({error:'invalid_photo'},400);body.photo=photo;}
+      }else body=JSON.parse(await bytes.text());
+    }catch{return respond({error:'invalid_request'},400);}
     if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'invalid_request'},400);
     const store=await (dependencies.makeStore|| (async()=>new Store(env,await accessToken(env))))();
     return respond(await channelAction(body,env,store,dependencies.api|| ((method,body)=>telegram(env,method,body))));
