@@ -114,8 +114,16 @@ class Store {
   async commit(writes){const r=await fetch(`https://firestore.googleapis.com/v1/${this.root}:commit`,{method:'POST',headers:{Authorization:'Bearer '+this.token,'Content-Type':'application/json'},body:JSON.stringify({writes}),signal:AbortSignal.timeout(12000)});if([409,412].includes(r.status))return false;if(!r.ok)throw new Error('firestore_write_failed');return true;}
 }
 async function telegram(env,method,body){
-  let payload=JSON.stringify(body),headers={'Content-Type':'application/json'};
-  if(body.photo instanceof Blob){payload=new FormData();for(const [key,value]of Object.entries(body))payload.append(key,value instanceof Blob?value:String(value),...(value instanceof Blob?['announcement.'+(value.type==='image/png'?'png':value.type==='image/webp'?'webp':'jpg')]:[]));headers={};}
+  let payload;
+  const headers=new Headers();
+  if(body.photo instanceof Blob){
+    const form=new FormData();
+    for(const [key,value]of Object.entries(body)){
+      if(value instanceof Blob)form.append(key,value,'announcement.'+(value.type==='image/png'?'png':value.type==='image/webp'?'webp':'jpg'));
+      else form.append(key,String(value));
+    }
+    payload=form;
+  }else{headers.set('Content-Type','application/json');payload=JSON.stringify(body);}
   const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',headers,body:payload,signal:AbortSignal.timeout(method==='sendPhoto'?25000:12000)});
   if(!r.ok)throw new Error('telegram_request_failed');const d=await r.json();if(!d.ok)throw new Error('telegram_request_failed');return d.result;
 }

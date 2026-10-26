@@ -123,7 +123,7 @@ const originalFetch=globalThis.fetch;let uploaded=false;
 globalThis.fetch=async(url,options)=>{
   if(!url.endsWith('/sendPhoto'))return Response.json({ok:true,result:await api(url.split('/').at(-1),JSON.parse(options.body))});
   assert.equal(url,'https://api.telegram.org/botfake/sendPhoto');
-  assert(options.body instanceof FormData);assert.equal(options.headers['Content-Type'],undefined);
+  assert(options.body instanceof FormData);assert.equal(new Headers(options.headers).get('Content-Type'),null);
   assert.equal(options.body.get('chat_id'),id);assert.equal(options.body.get('caption'),TEST_TEXT);
   assert(options.body.get('photo') instanceof Blob);uploaded=true;
   return Response.json({ok:true,result:{message_id:999,chat:{id:Number(id)},photo:[{file_id:'multipart-photo'}]}});
