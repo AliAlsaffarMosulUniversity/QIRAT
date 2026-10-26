@@ -40,4 +40,15 @@ assert.equal(unauthorized.status,403);
 assert.equal(await registerMember('firstGoogleUser',store),1);
 assert.equal(await registerMember('firstGoogleUser',store),1);
 assert.equal(await registerMember('secondGoogleUser',store),2);
+// A form POST must retain its same-origin Origin header; no-referrer makes it null.
+const setupPageResponse=await worker.fetch(new Request('https://qirat.example/setup'),{});
+assert.equal(setupPageResponse.headers.get('Referrer-Policy'),'same-origin');
+const setupSecrets={TELEGRAM_BOT_TOKEN:'not-a-real-token',TELEGRAM_WEBHOOK_SECRET:'a'.repeat(32)};
+const foreignSetup=await worker.fetch(new Request('https://qirat.example/setup',{method:'POST',headers:{Origin:'https://other.example'},body:'secret='+setupSecrets.TELEGRAM_WEBHOOK_SECRET}),setupSecrets);
+assert.equal(foreignSetup.status,403);
+assert.match(await foreignSetup.text(),/origin mismatch/);
+const incorrectSetup=await worker.fetch(new Request('https://qirat.example/setup',{method:'POST',headers:{Origin:'https://qirat.example'},body:'secret=incorrect'}),setupSecrets);
+assert.equal(incorrectSetup.status,403);
+assert.match(await incorrectSetup.text(),/secret mismatch/);
+
 console.log('PASS: Arabic sample, prayer selection, calendar validation, missing prayer clarification, authorized publication, retry and content deduplication, cancellation, webhook authentication, and unique member counting');
