@@ -10,7 +10,7 @@ function node(selector) {
   if (!nodes.has(selector)) nodes.set(selector, {innerHTML:'',textContent:'',disabled:false,value:'',setAttribute(name,value){this[name]=value},classList:{add(){},remove(){},toggle(){},contains(){return false}},focus(){},setSelectionRange(){},querySelector(){return node('submit')}});
   return nodes.get(selector);
 }
-const context = vm.createContext({console, document:{querySelector:node,querySelectorAll:()=>[],body:node('body'),addEventListener(){}},window:{scrollTo(){},addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},history:{replaceState(){}},location:{href:'https://example.com/',hash:'',pathname:'/',search:''},navigator:{},crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},setTimeout(){},confirm:()=>true,FormData:class {entries(){return Object.entries({name:'إعلان اختبار',gender:'male',city:'الموصل',area:'',mosque:'جامع اختبار',date:'2026-10-27',time:'12:00',map:'',notes:'',consent:'on'})}}});
+const context = vm.createContext({console, document:{querySelector:node,querySelectorAll:()=>[],body:node('body'),addEventListener(){}},window:{scrollTo(){},addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},history:{replaceState(){}},location:{href:'https://example.com/',hash:'',pathname:'/',search:''},navigator:{},crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},setTimeout(){},confirm:()=>true,FormData:class {entries(){return Object.entries({name:'إعلان اختبار',gender:'male',city:'الموصل',area:'',mosque:'جامع اختبار',date:'2026-10-27',prayer:'fajr',map:'',notes:'',cemetery:'',consent:'on'})}}});
 vm.runInContext(source, context);
 vm.runInContext("form($('#content'))",context);
 assert.match(node('#content').innerHTML,/جارٍ الاتصال/);
@@ -25,17 +25,17 @@ vm.runInContext("cloud={saveAnnouncement:async(e)=>{globalThis.saved=e}};form($(
   await node('#entryForm').onsubmit({preventDefault(){},target:node('#entryForm')});
   assert.equal(context.saved.ownerUid,'owner');
   assert.equal(context.saved.status,'published');
-  assert.equal(context.saved.datetime,'2026-10-27T12:00');
+  assert.equal(context.saved.datetime,'2026-10-27T00:00');
   assert.match(node('#toast').textContent,/تم نشر الإعلان/);
   vm.runInContext("cloud={saveAnnouncement:async()=>{throw {code:'permission-denied'}}};form($('#content'))",context);
   await node('#entryForm').onsubmit({preventDefault(){},target:node('#entryForm')});
   assert.equal(node('submit').disabled,false);
   assert.match(node('#toast').textContent,/تعذر الوصول/);
-  assert.equal((html.match(/href="tel:07750856155"/g)||[]).length,3);
+  assert.equal((html.match(/href="tel:07750856155"/g)||[]).length,2);
   assert(!html.includes('حفظ الإعلان على هذا الجهاز'));
-  assert.equal(vm.runInContext("prayerDateTime('2026-02-30','12:00')",context),null);
-  assert.equal(vm.runInContext("prayerDateTime('2028-02-29','23:59')",context),'2028-02-29T23:59');
-  assert.equal(vm.runInContext("prayerDateTime('2026-10-27','24:00')",context),null);
+  assert.equal(vm.runInContext("prayerDateTime('2026-02-30','fajr')",context),null);
+  assert.equal(vm.runInContext("prayerDateTime('2028-02-29','fajr')",context),'2028-02-29T00:00');
+  assert.equal(vm.runInContext("prayerDateTime('2026-10-27','unknown')",context),null);
   vm.runInContext("cloud={isAdministrator:()=>false};currentUser={uid:'intruder'};page='admin';admin($('#content'))",context);
   assert.match(node('#content').innerHTML,/متاحة لمدير/);
   vm.runInContext("cloud={isAdministrator:()=>true,deleteAnnouncement:async id=>{globalThis.deleted=id}};currentUser={uid:'admin'};adminEntries=[{id:'22222222-2222-4222-8222-222222222222',ownerUid:'other',name:'إعلان قديم',mosque:'جامع',city:'الموصل',datetime:'2026-10-27T12:00'}]",context);
@@ -49,7 +49,15 @@ vm.runInContext("cloud={saveAnnouncement:async(e)=>{globalThis.saved=e}};form($(
   assert(!html.includes('type="datetime-local"'));
   vm.runInContext("document.body.classList.contains=()=>true;themeLabel()",context);
   assert.equal(node('#theme').textContent,'☾');
+  assert(!/<input[^>]+type="time"/.test(html));
+  assert.match(html,/name="prayer"/);
+  vm.runInContext("globalThis.rings=0;playAlert=()=>rings++;announceNewItems([]);alertsEnabled=true;announceNewItems([{id:'new1'}]);announceNewItems([{id:'new1'}]);alertsEnabled=false;announceNewItems([{id:'new2'}])",context);
+  assert.equal(context.rings,1);
+  assert.match(vm.runInContext("format('2026-10-27T00:00','fajr')",context),/صلاة الفجر/);
+  assert(!vm.runInContext("format('2026-10-27T03:11')",context).includes('٣:١١'));
   console.log('PASS: separate date/time, validation, owner and administrator controls, publish failure, theme icons, phone links');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+
 
 

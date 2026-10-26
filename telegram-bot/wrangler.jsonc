@@ -1,0 +1,11 @@
+{
+  "name": "qirat-telegram-bot",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-26",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "qirat-6f86e",
+    "DEFAULT_CITY": "الموصل",
+    "APP_URL": "https://alialsaffarmosuluniversity.github.io/QIRAT/"
+  }
+}

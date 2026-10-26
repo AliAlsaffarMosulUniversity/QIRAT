@@ -11,7 +11,7 @@ service cloud.firestore {
     function validAnnouncement(id) {
       let d = request.resource.data;
       return d.keys().hasAll(['id','name','gender','city','area','mosque','datetime','map','notes','status','ownerUid','createdAt','updatedAt'])
-        && d.keys().hasOnly(['id','name','gender','city','area','mosque','datetime','map','notes','status','ownerUid','createdAt','updatedAt','cemetery'])
+        && d.keys().hasOnly(['id','name','gender','city','area','mosque','datetime','map','notes','status','ownerUid','createdAt','updatedAt','cemetery','prayer'])
         && id.matches('[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
         && d.id == id
         && d.ownerUid == request.auth.uid
@@ -24,8 +24,12 @@ service cloud.firestore {
         && d.map is string && d.map.size() <= 2000 && (d.map == '' || d.map.matches('https://.*'))
         && d.notes is string && d.notes.size() <= 600
         && (!('cemetery' in d) || (d.cemetery is string && d.cemetery.size() <= 120))
+        && (!('prayer' in d) || d.prayer in ['fajr','dhuhr','asr','maghrib','isha'])
         && d.status == 'published'
         && d.createdAt is timestamp && d.updatedAt == request.time;
+    }
+    match /stats/users {
+      allow get: if true;
     }
     match /announcements/{id} {
       allow get: if true;
@@ -37,4 +41,5 @@ service cloud.firestore {
     }
   }
 }
+
 
