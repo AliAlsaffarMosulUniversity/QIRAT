@@ -10,3 +10,10 @@ QIRAT account eligibility and API access to the existing group remain unverified
 
 Validation: node tests/whatsapp-sharing.cjs
 No real messages are sent in tests.
+
+## Approved test group
+Owner confirmed this replacement invitation on 2026-10-27:
+https://chat.whatsapp.com/Lo09oq3HUiZ7VZQasuwQ7f
+
+The invitation preview displays: تبليغات قسم نظم المعلومات الادارية.
+This is the sole approved test-group reference; it supersedes the earlier invitation. No other 23 groups are authorized. Recording the link does not configure direct delivery or prove Cloud API eligibility. No message was sent when updating this reference.
