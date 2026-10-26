@@ -139,7 +139,7 @@ export async function processUpdate(update,env,store,reply=(id,text)=>send(env,i
   throw new Error('concurrent_update_retry');
 }
 function setupPage(){return `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ربط بوت قيراط</title><style>body{font:18px Tahoma;background:#101010;color:#f3d58e;max-width:620px;margin:60px auto;padding:24px}input,button{font:inherit;padding:12px;margin:10px 0;width:100%;box-sizing:border-box}p{line-height:1.9}</style><h1>ربط بوت قيراط</h1><p>بعد إضافة الأسرار في إعدادات Cloudflare، أدخل قيمة TELEGRAM_WEBHOOK_SECRET لتفعيل استقبال الرسائل. لا تدخل مفتاح البوت هنا.</p><form action="/setup" method="post"><input type="password" name="secret" autocomplete="off" required placeholder="TELEGRAM_WEBHOOK_SECRET"><button>تفعيل الربط</button></form><p>المفتاح لا يظهر في عنوان الصفحة. البوت لا ينشر إلا الرسائل المحولة من حساب المدير المحدد في الإعدادات.</p></html>`;}
-function output(text,status=200,type='text/plain; charset=utf-8'){return new Response(text,{status,headers:{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer'}});}
+function output(text,status=200,type='text/plain; charset=utf-8'){return new Response(text,{status,headers:{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",'Referrer-Policy':'same-origin'}});}
 export async function registerMember(uid,store){
   const memberPath='_qiratMembers/'+uid;
   for(let attempt=0;attempt<3;attempt++){
@@ -179,9 +179,9 @@ export default {
     if(!/^[A-Za-z0-9_-]{24,256}$/.test(env.TELEGRAM_WEBHOOK_SECRET||'') || !env.TELEGRAM_BOT_TOKEN)return output('Configuration required',503);
     try {
       if(url.pathname==='/setup'){
-        const origin=request.headers.get('origin');if(origin!==url.origin)return output('Forbidden',403);
+        const origin=request.headers.get('origin');if(origin!==url.origin)return output('Setup origin mismatch. Open this page directly in your browser.',403);
         const setupBody=await request.text();if(setupBody.length>65536)return output('Too large',413);
-        const form=new URLSearchParams(setupBody);if(!equal(form.get('secret'),env.TELEGRAM_WEBHOOK_SECRET))return output('Forbidden',403);
+        const form=new URLSearchParams(setupBody);if(!equal(form.get('secret'),env.TELEGRAM_WEBHOOK_SECRET))return output('Setup secret mismatch. Check the deployed secret value.',403);
         const configured=!!env.FIREBASE_SERVICE_ACCOUNT_JSON&&/^\d+$/.test(env.TELEGRAM_ADMIN_ID||'')&&/^[-a-z0-9]+$/.test(env.FIREBASE_PROJECT_ID||'');
         if(configured){const store=new Store(env,await accessToken(env));await store.get('_qiratTelegramHealth/check');}
         const existing=await telegram(env,'getWebhookInfo',{});if(existing.url&&existing.url!==url.origin+'/telegram')return output('للبوت ربط سابق مختلف. راجعه قبل استبداله.',409);
