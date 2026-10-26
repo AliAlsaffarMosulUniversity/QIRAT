@@ -43,6 +43,16 @@ export async function deleteAnnouncement(id) {
 }
 
 export const isAdministrator = user => !!user && user.emailVerified === true && user.email === 'ali_alsaffar@uomosul.edu.iq' && user.providerData?.some(p => p.providerId === 'google.com');
+export async function telegramChannelRequest(body) {
+  if (!isAdministrator(auth.currentUser)) throw new Error('administrator_required');
+  const token = await auth.currentUser.getIdToken();
+  const response = await fetch('https://qirat-telegram-bot.anaqatal-rafidain.workers.dev/channels', {
+    method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+  let data; try { data=await response.json(); } catch { throw new Error('channels_unavailable'); }
+  if (!response.ok) throw new Error(data.error || 'channels_unavailable');
+  return data;
+}
 export async function getAdminAnnouncements(cursor = null) {
   if (!isAdministrator(auth.currentUser)) throw new Error('Administrator access required');
   const constraints = [orderBy('datetime', 'desc')];

@@ -1,5 +1,5 @@
-const CACHE = 'qirat-shell-emerald-v3';
-const SHELL = ['./', './index.html', './firebase.js?v=20261026-emerald', './install.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
+const CACHE = 'qirat-shell-channels-v1';
+const SHELL = ['./', './index.html', './firebase.js?v=20261026-channels', './telegram-channels.js?v=20261026-channels', './install.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

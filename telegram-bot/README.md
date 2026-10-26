@@ -1,5 +1,7 @@
 # QIRAT Telegram bridge on Cloudflare Workers Free
 
+For channel publication, management from the application, permission checks, and the safe publish/edit/delete workflow, see [CHANNELS.md](CHANNELS.md). The worker now imports `channels.mjs`; deploy the complete module project.
+
 Bot: https://t.me/QiratMosulAlertsBot
 
 The worker receives private messages from one configured Telegram user. Complete announcements publish directly to the existing Firestore announcements collection. When data is missing, the bot asks for it. Prayer names are used instead of exact clock times. "After Fajr" selects fajr; the bot never invents a clock time.

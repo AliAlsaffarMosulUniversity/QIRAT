@@ -1,4 +1,5 @@
 // QIRAT Telegram bridge. No credentials belong in this file.
+import { channelAction, rememberChannel, ChannelError } from './channels.mjs';
 const encoder = new TextEncoder();
 const tokenCache = new Map();
 const numeric = text => String(text || '').replace(/[٠-٩]/g, c => String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776));
@@ -99,6 +100,15 @@ function decodeValue(value){if('mapValue'in value)return decodeFields(value.mapV
 function decodeFields(fields){return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,decodeValue(v)]));}
 class Store {
   constructor(env,token){this.env=env;this.token=token;this.root=`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;}
+  async list(path){
+    const items=[];let page='';
+    do {
+      const r=await fetch(`https://firestore.googleapis.com/v1/${this.root}/${path}?pageSize=100${page?'&pageToken='+encodeURIComponent(page):''}`,{headers:{Authorization:'Bearer '+this.token},signal:AbortSignal.timeout(12000)});
+      if(!r.ok)throw new Error('firestore_read_failed');const data=await r.json();
+      items.push(...(data.documents||[]).map(d=>decodeFields(d.fields||{})));page=data.nextPageToken||'';
+      if(items.length>=1000&&page)throw new Error('registry_limit');
+    }while(page);return items;
+  }
   async get(path){const r=await fetch(`https://firestore.googleapis.com/v1/${this.root}/${path}`,{headers:{Authorization:'Bearer '+this.token},signal:AbortSignal.timeout(12000)});if(r.status===404)return null;if(!r.ok)throw new Error('firestore_read_failed');const d=await r.json();return {data:decodeFields(d.fields||{}),updateTime:d.updateTime};}
   put(path,data,previous,stamps=[]){return {update:{name:this.root+'/'+path,fields:encodeFields(data)},currentDocument:previous?{updateTime:previous.updateTime}:{exists:false},...(stamps.length?{updateTransforms:stamps.map(fieldPath=>({fieldPath,setToServerValue:'REQUEST_TIME'}))}:{})};}
   async commit(writes){const r=await fetch(`https://firestore.googleapis.com/v1/${this.root}:commit`,{method:'POST',headers:{Authorization:'Bearer '+this.token,'Content-Type':'application/json'},body:JSON.stringify({writes}),signal:AbortSignal.timeout(12000)});if([409,412].includes(r.status))return false;if(!r.ok)throw new Error('firestore_write_failed');return true;}
@@ -204,10 +214,41 @@ export async function visitorRequest(request,env,makeStore=async()=>new Store(en
   }catch{return respond({error:'counter_unavailable'},503);}
 }
 
+export async function channelsRequest(request,env,dependencies={}){
+  const origin=new URL(env.APP_URL||'https://alialsaffarmosuluniversity.github.io/QIRAT/').origin;
+  const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Vary':'Origin','Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff'};
+  const respond=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
+  if(request.headers.get('Origin')!==origin)return respond({error:'forbidden'},403);
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
+  if(request.method!=='POST')return respond({error:'method_not_allowed'},405);
+  if(!env.FIREBASE_SERVICE_ACCOUNT_JSON||!env.TELEGRAM_BOT_TOKEN)return respond({error:'configuration_required'},503);
+  const token=request.headers.get('Authorization')?.match(/^Bearer ([^\s]{1,8192})$/)?.[1];
+  if(!token)return respond({error:'sign_in_required'},401);
+  try{
+    const lookupUser=dependencies.lookupUser|| (async token=>{
+      const apiKey=env.FIREBASE_WEB_API_KEY||'AIzaSyB-opp6w-TfZCvfHNmXc_o3CMR6mjOkvdQ';
+      const r=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key='+encodeURIComponent(apiKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:token}),signal:AbortSignal.timeout(12000)});
+      return r.ok?(await r.json()).users?.[0]:null;
+    });
+    const user=await lookupUser(token);
+    if(!user?.localId||!user.emailVerified||user.email!=='ali_alsaffar@uomosul.edu.iq'||!user.providerUserInfo?.some(p=>p.providerId==='google.com'))return respond({error:'administrator_required'},403);
+    if(Number(request.headers.get('Content-Length')||0)>2048)return respond({error:'too_large'},413);
+    const raw=await request.text();if(raw.length>2048)return respond({error:'too_large'},413);
+    let body;try{body=JSON.parse(raw)}catch{return respond({error:'invalid_request'},400);}
+    if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'invalid_request'},400);
+    const store=await (dependencies.makeStore|| (async()=>new Store(env,await accessToken(env))))();
+    return respond(await channelAction(body,env,store,dependencies.api|| ((method,body)=>telegram(env,method,body))));
+  }catch(error){
+    if(error instanceof ChannelError)return respond({error:error.message},error.status);
+    return respond({error:'channels_unavailable'},503);
+  }
+}
+
 export default {
   async fetch(request,env) {
     env={...env,FIREBASE_PROJECT_ID:env.FIREBASE_PROJECT_ID||'qirat-6f86e'};
     const url=new URL(request.url);
+    if(url.pathname==='/channels')return channelsRequest(request,env);
     if(url.pathname==='/visitors')return visitorRequest(request,env);
     if(url.pathname==='/register-user')return registerRequest(request,env);
     if(url.pathname==='/'&&request.method==='GET')return output('QIRAT Telegram bridge — /setup');
@@ -223,19 +264,27 @@ export default {
         const configured=!!env.FIREBASE_SERVICE_ACCOUNT_JSON&&/^\d+$/.test(env.TELEGRAM_ADMIN_ID||'')&&/^[-a-z0-9]+$/.test(env.FIREBASE_PROJECT_ID||'');
         if(configured){const store=new Store(env,await accessToken(env));await store.get('_qiratTelegramHealth/check');}
         const existing=await telegram(env,'getWebhookInfo',{});if(existing.url&&existing.url!==url.origin+'/telegram')return output('للبوت ربط سابق مختلف. راجعه قبل استبداله.',409);
-        await telegram(env,'setWebhook',{url:url.origin+'/telegram',secret_token:env.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message'],max_connections:1,drop_pending_updates:false});
+        await telegram(env,'setWebhook',{url:url.origin+'/telegram',secret_token:env.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','my_chat_member'],max_connections:1,drop_pending_updates:false});
         await telegram(env,'setMyCommands',{commands:[{command:'start',description:'بدء استقبال تبليغات قيراط'},{command:'cancel',description:'إلغاء التبليغ المعلق'},{command:'status',description:'آخر إعلان وحالة التبليغ'},{command:'new',description:'بدء تبليغ جديد'}]});
         return output(configured?'تم تفعيل الربط. افتح @QiratMosulAlertsBot وأرسل /start، ثم حوّل التبليغ.':'تم تفعيل استقبال /start لمعرفة رقم حسابك فقط. أرسل /start للبوت، ثم أضف TELEGRAM_ADMIN_ID وبيانات Firebase في الأسرار وأعد التفعيل من هذه الصفحة. النشر غير مفعّل بعد.');
       }
       if(!equal(request.headers.get('X-Telegram-Bot-Api-Secret-Token'),env.TELEGRAM_WEBHOOK_SECRET))return output('Forbidden',403);
       const raw=await request.text();if(raw.length>65536)return output('Too large',413);
       let update;try{update=JSON.parse(raw)}catch{return output('Invalid JSON',400)}
+      if(update.my_chat_member?.chat?.type==='channel'){
+        if(!env.FIREBASE_SERVICE_ACCOUNT_JSON)return output('Configuration required',503);
+        await rememberChannel(update,env,new Store(env,await accessToken(env)));return output('OK');
+      }
       if(update.message?.chat?.type!=='private'||String(update.message?.from?.id)!==String(env.TELEGRAM_ADMIN_ID)){
         if(update.message?.chat?.type==='private'&&update.message?.text==='/start')await send(env,update.message.chat.id,'بوت قيراط مخصص للمدير. معرّف حسابك: '+update.message.from.id);
         return output('OK');
       }
       if(!env.FIREBASE_SERVICE_ACCOUNT_JSON||!/^\d+$/.test(env.TELEGRAM_ADMIN_ID||''))return output('Configuration required',503);
-      const store=new Store(env,await accessToken(env));await processUpdate(update,env,store);return output('OK');
+      const store=new Store(env,await accessToken(env));
+      if(await rememberChannel(update,env,store)){
+        await send(env,update.message.chat.id,'تم اكتشاف القناة. افتح لوحة المدير في قيراط ← قنوات Telegram، ثم تحقق من القناة واربطها. لم تُنشر أي رسالة في القناة.');return output('OK');
+      }
+      await processUpdate(update,env,store);return output('OK');
     } catch{console.error('QIRAT bridge request failed');return output('تعذر إكمال العملية. أعد المحاولة لاحقاً.',503);}
   }
 };

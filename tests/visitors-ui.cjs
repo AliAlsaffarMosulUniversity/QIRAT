@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8'),source=html.match(/async function loadVisitorCount\(\)\{[\s\S]*?\n\}\n/)[0];
+const html=fs.readFileSync('index.html','utf8').replace(/\r\n/g,'\n'),source=html.match(/async function loadVisitorCount\(\)\{[\s\S]*?\n\}\n/)[0];
 (async()=>{
 const values=new Map(),badge={},requests=[];let fail=false,blocked=false;
 const context=vm.createContext({visitorCount:null,localStorage:{getItem:k=>{if(blocked)throw Error('blocked');return values.get(k)},setItem:(k,v)=>values.set(k,v)},crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},AbortSignal,fetch:async(u,o)=>{requests.push(o);return {ok:!fail,json:async()=>({count:12})}},$:()=>badge});
