@@ -1,54 +1,24 @@
-/* Manual-only pilot. No WhatsApp API credentials, recipients or delivery claims. */
+/* Official manual share link only. An invite URL cannot select a recipient. */
 const WHATSAPP_TEST_TEXT = 'قيراط | QIRAT — اختبار تقني لنظام نشر الإعلانات. هذه رسالة تجريبية فقط، وليست إعلان وفاة حقيقياً';
-function whatsappPromptEnabled() {
-  try { return localStorage.getItem('qirat_whatsapp_prompt_v1') === 'on'; } catch { return false; }
-}
-function whatsappAfterPublication() {
-  if (isAdmin() && whatsappPromptEnabled()) openWhatsAppGroups();
-}
 function openWhatsAppGroups() {
   if (!isAdmin()) return;
-  modal(`<h2>إرسال إلى المجموعات — تجربة يدوية</h2>
-    <p class="notice">التجربة لمجموعة الاختبار التي تملكها فقط. لا ترسل إلى المجموعات الـ23 الأخرى. اختر المجموعة بنفسك داخل WhatsApp وراجعها قبل الإرسال.</p>
-    <label for="waPreview">النص التجريبي الثابت</label>
-    <textarea class="field" id="waPreview" readonly></textarea>
-    <p class="notice">رابط الدعوة لا يحدد مستلم الرسالة ولا يسمح بالنشر عبر API. فتح WhatsApp أو إغلاق نافذة المشاركة لا يثبت إرسال الرسالة.</p>
-    <p><a class="btn" href="https://chat.whatsapp.com/LCs9RtmTFWZA2JvmhUay6R" target="_blank" rel="noopener noreferrer">عرض مجموعة الاختبار (دعوة فقط)</a></p>
-    <label class="notice"><input id="waConfirm" type="checkbox"> سأختار مجموعة الاختبار وحدها وأراجع المستلم في WhatsApp.</label>
-    <div class="actions">
-      <button class="btn gold" id="waOpen" disabled>فتح WhatsApp للمشاركة اليدوية</button>
-      <button class="btn" id="waShare" disabled>مشاركة عبر الجهاز</button>
-      <button class="btn" id="waCopy">نسخ النص التجريبي</button>
-    </div>
-    <p id="waStatus" role="status" aria-live="polite" class="notice">لم تُرسل أي رسالة من قيراط.</p>
-    <hr>
-    <label class="notice"><input id="waPrompt" type="checkbox"> إظهار نافذة المشاركة بعد نشر إعلان جديد من هذا المتصفح (للمدير)</label>
-    <p class="notice">هذا تذكير يدوي بالنص التجريبي فقط. قيراط ينشر الإعلانات مباشرة حالياً؛ لا توجد مرحلة اعتماد منفصلة.</p>
-    <button class="btn" disabled>النشر التلقائي بعد الاعتماد — غير مفعّل</button>
-    <p class="notice">لم نتحقق من أهلية حساب قيراط ومجموعة الاختبار لواجهة Groups API الرسمية. لن يحدث إرسال تلقائي حتى يتم ذلك وتُعتمد وجهة واحدة صراحةً.</p>`);
-  $('#waPreview').value = WHATSAPP_TEST_TEXT;
-  $('#waPrompt').checked = whatsappPromptEnabled();
-  $('#waPrompt').onchange = e => {
-    try { localStorage.setItem('qirat_whatsapp_prompt_v1', e.target.checked ? 'on' : 'off'); }
-    catch { e.target.checked = false; $('#waStatus').textContent = 'تعذر حفظ التفضيل في هذا المتصفح.'; }
-  };
-  $('#waConfirm').onchange = e => {
-    $('#waOpen').disabled = !e.target.checked;
-    $('#waShare').disabled = !e.target.checked || typeof navigator.share !== 'function';
-  };
-  $('#waCopy').onclick = () => copy(WHATSAPP_TEST_TEXT);
-  $('#waOpen').onclick = () => {
-    if (!isAdmin() || !$('#waConfirm').checked) return;
-    window.open('https://wa.me/?text=' + encodeURIComponent(WHATSAPP_TEST_TEXT), '_blank', 'noopener,noreferrer');
-    $('#waStatus').textContent = 'طُلب فتح WhatsApp. اختر مجموعة الاختبار وحدها وأكمل الإرسال بنفسك؛ لا يمكن لقيراط تأكيد التسليم.';
-  };
-  $('#waShare').onclick = async () => {
-    if (!isAdmin() || !$('#waConfirm').checked || !navigator.share) return;
-    try {
-      await navigator.share({title:'قيراط — اختبار تقني', text:WHATSAPP_TEST_TEXT});
-      $('#waStatus').textContent = 'أُغلقت نافذة المشاركة؛ لا يمكن لقيراط تأكيد الإرسال أو المستلم.';
-    } catch (error) {
-      $('#waStatus').textContent = error.name === 'AbortError' ? 'أُلغيت المشاركة.' : 'تعذرت المشاركة. يمكنك استخدام رابط WhatsApp أو نسخ النص.';
+  modal(`<h2>رسالة واتساب</h2>
+    <label for="waMessage">اكتب الرسالة</label>
+    <textarea class="field" id="waMessage" maxlength="4000" placeholder="اكتب رسالتك هنا…"></textarea>
+    <p class="notice">بعد فتح واتساب، اختر كروب الاختبار الذي تملكه فقط ثم اضغط إرسال. رابط الدعوة لا يحدد المستلم تلقائياً.</p>
+    <div class="actions"><button class="btn" id="waSend" type="button" aria-label="فتح واتساب بالرسالة" title="فتح واتساب بالرسالة" style="background:#25d366;color:#052e16;display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:48px"><svg viewBox="0 0 32 32" width="25" height="25" fill="currentColor" aria-hidden="true" focusable="false"><path d="M16 3a13 13 0 0 0-11.2 19.6L3 29l6.6-1.7A13 13 0 1 0 16 3Zm0 23.5a10.5 10.5 0 0 1-5.4-1.5l-.4-.2-3.9 1 1-3.8-.3-.4A10.5 10.5 0 1 1 16 26.5Zm5.8-7.9c-.3-.2-1.8-.9-2.1-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7 0a8.6 8.6 0 0 1-4.2-3.7c-.3-.5.3-.5.9-1.7.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.8.4s-1.1 1.1-1.1 2.6 1.1 2.9 1.3 3.1 2.2 3.4 5.4 4.7c2 .9 2.8 1 3.8.9.6-.1 1.8-.8 2.1-1.5s.3-1.4.2-1.5-.3-.2-.6-.3Z"/></svg></button></div>
+    <p class="notice" id="waStatus" role="status" aria-live="polite"></p>`);
+  $('#waMessage').value = WHATSAPP_TEST_TEXT;
+  $('#waMessage').oninput = () => { $('#waStatus').textContent = ''; };
+  $('#waSend').onclick = () => {
+    if (!isAdmin()) return;
+    const text = $('#waMessage').value.trim();
+    if (!text) {
+      $('#waStatus').textContent = 'اكتب الرسالة أولاً.';
+      $('#waMessage').focus();
+      return;
     }
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+    $('#waStatus').textContent = 'أكمل اختيار الكروب والإرسال داخل واتساب.';
   };
 }
