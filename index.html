@@ -74,6 +74,6 @@ function announceNewItems(items){const added=items.filter(a=>!seenAnnouncements.
 $('#alerts').onclick=()=>{alertsEnabled=!alertsEnabled;localStorage.setItem('qirat_alerts',alertsEnabled?'on':'off');unlockAlertAudio();updateAlerts();notify(alertsEnabled?'تم تفعيل الجرس أثناء فتح التطبيق. اضغط داخل الصفحة بعد فتحها لتشغيل الصوت.':'تم إيقاف جرس التبليغات')};
 document.addEventListener('pointerdown',unlockAlertAudio,{passive:true});updateAlerts();
 
-</script><script src="./whatsapp-sharing.js?v=20261027-simple"></script><script src="./install.js" defer></script></body></html>
+</script><script src="./whatsapp-sharing.js?v=20261027-multishare"></script><script src="./install.js" defer></script></body></html>
 
 

@@ -5,6 +5,7 @@ const c=vm.createContext({isAdmin:()=>admin,modal:h=>markup=h,$:node,window:{ope
 vm.runInContext(fs.readFileSync('whatsapp-sharing.js','utf8'),c);
 vm.runInContext('openWhatsAppGroups()',c);
 assert.equal(opened.length,0);
+assert(markup.includes('اختر الكروبات'));assert(!markup.includes('كروب الاختبار'));
 assert(markup.includes('id="waMessage"'));assert(markup.includes('<svg'));
 assert.equal((markup.match(/<button/g)||[]).length,1);
 assert(!markup.includes('checkbox'));assert(!markup.includes('readonly'));
