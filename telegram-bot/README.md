@@ -43,3 +43,13 @@ The /setup page refuses to overwrite a different existing Telegram webhook. It s
 Run node test.mjs. Tests cover the supplied Arabic sample, missing prayer name, leap dates, unauthorized senders, webhook authentication, retries, content deduplication, cancellation, and database errors. Live Google access and publication must be checked after secrets are configured. No production funeral announcement is created by the test suite.
 
 References: https://core.telegram.org/bots/api#setwebhook, https://developers.cloudflare.com/workers/configuration/secrets/, https://firebase.google.com/docs/firestore/use-rest-api.
+
+## Visitor counter
+
+Deploy the updated worker.mjs to the existing qirat-telegram-bot Worker to enable /visitors. Existing service-account settings are reused; no Firestore rules change is needed. The home page shows an em dash if this endpoint is unavailable.
+
+POST /visitors accepts a random UUID v4 generated and persisted in the visitor's browser. It atomically creates a private _qiratVisitors record and increments stats/visitors once per browser identity. GET reads the total without registering a visitor. Only the application's origin is accepted by the browser API. No sign-in, name, email, or IP address is stored by this counter.
+
+The count starts at activation and cannot recover past visitors. Multiple browsers, cleared browser storage and private browsing can count the same person again. This is an approximate browser count, not verified unique people. Origin checks and random IDs do not prevent fabricated requests; use server-side abuse controls if needed. The stored visitor IDs currently do not expire.
+
+From the repository root, run node telegram-bot/visitors.test.mjs and node tests/visitors-ui.cjs to check deduplication, concurrent writes, retries, request validation, unavailable service and blocked browser storage.

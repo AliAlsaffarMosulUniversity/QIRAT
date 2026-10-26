@@ -167,10 +167,48 @@ async function registerRequest(request,env){
     const count=await registerMember(user.localId,new Store(env,await accessToken(env)));return respond({count});
   }catch{return respond({error:'registration_unavailable'},503);}
 }
+
+export async function registerVisitor(id,store){
+  const path='_qiratVisitors/'+id;
+  for(let attempt=0;attempt<5;attempt++){
+    const visitor=await store.get(path),stats=await store.get('stats/visitors');
+    const count=Number(stats?.data?.count||0);
+    if(!Number.isSafeInteger(count)||count<0||count>=Number.MAX_SAFE_INTEGER)throw new Error('invalid_counter');
+    if(visitor)return count;
+    if(await store.commit([store.put(path,{registered:true},null),store.put('stats/visitors',{count:count+1},stats,['updatedAt'])]))return count+1;
+  }
+  throw new Error('counter_conflict');
+}
+export async function visitorRequest(request,env,makeStore=async()=>new Store(env,await accessToken(env))){
+  const origin=new URL(env.APP_URL||'https://alialsaffarmosuluniversity.github.io/QIRAT/').origin;
+  const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','Cache-Control':'no-store','Content-Type':'application/json'};
+  const respond=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
+  if(request.headers.get('Origin')!==origin)return respond({error:'forbidden'},403);
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
+  if(!['GET','POST'].includes(request.method))return respond({error:'method_not_allowed'},405);
+  if(!env.FIREBASE_SERVICE_ACCOUNT_JSON)return respond({error:'configuration_required'},503);
+  try{
+    let id;
+    if(request.method==='POST'){
+      if(Number(request.headers.get('Content-Length')||0)>256)return respond({error:'too_large'},413);
+      const raw=await request.text();if(raw.length>256)return respond({error:'too_large'},413);
+      let body;try{body=JSON.parse(raw)}catch{return respond({error:'invalid_request'},400);}
+      id=body?.visitorId;
+      if(typeof id!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return respond({error:'invalid_visitor'},400);
+      id=id.toLowerCase();
+    }
+    const store=await makeStore();
+    const count=id?await registerVisitor(id,store):Number((await store.get('stats/visitors'))?.data?.count||0);
+    if(!Number.isSafeInteger(count)||count<0)throw new Error('invalid_counter');
+    return respond({count});
+  }catch{return respond({error:'counter_unavailable'},503);}
+}
+
 export default {
   async fetch(request,env) {
     env={...env,FIREBASE_PROJECT_ID:env.FIREBASE_PROJECT_ID||'qirat-6f86e'};
     const url=new URL(request.url);
+    if(url.pathname==='/visitors')return visitorRequest(request,env);
     if(url.pathname==='/register-user')return registerRequest(request,env);
     if(url.pathname==='/'&&request.method==='GET')return output('QIRAT Telegram bridge — /setup');
     if(url.pathname==='/setup'&&request.method==='GET')return output(setupPage(),200,'text/html; charset=utf-8');
