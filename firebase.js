@@ -57,3 +57,13 @@ export async function getAdminAnnouncements(cursor = null) {
   };
 }
 
+
+export const watchUserCount=(callback,onError)=>onSnapshot(doc(db,'stats','users'),snapshot=>callback(snapshot.exists()?Number(snapshot.data().count||0):0),onError);
+export async function registerCurrentUser(){
+  if(!auth.currentUser)return;
+  const token=await auth.currentUser.getIdToken();
+  const response=await fetch('https://qirat-telegram-bot.anaqatal-rafidain.workers.dev/register-user',{method:'POST',headers:{Authorization:'Bearer '+token}});
+  if(!response.ok)throw new Error('Member registration unavailable');
+  return response.json();
+}
+

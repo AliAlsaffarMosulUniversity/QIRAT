@@ -1,4 +1,4 @@
-const CACHE = 'qirat-shell-v1';
+const CACHE = 'qirat-shell-emerald-v2';
 const SHELL = ['./', './index.html', './firebase.js', './install.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
