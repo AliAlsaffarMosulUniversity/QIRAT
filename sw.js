@@ -1,5 +1,5 @@
-const CACHE = 'qirat-shell-messenger-v4';
-const SHELL = ['./', './index.html', './firebase.js?v=20261026-compose', './telegram-channels.js?v=20261026-compose', './whatsapp-sharing.js?v=20261027-multishare', './messenger-sharing.js?v=20261027-manual', './install.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
+const CACHE = 'qirat-shell-administrators-v5';
+const SHELL = ['./', './index.html', './firebase.js?v=20261027-administrators', './telegram-channels.js?v=20261026-compose', './whatsapp-sharing.js?v=20261027-multishare', './messenger-sharing.js?v=20261027-manual', './administrators-ui.js?v=20261027-administrators', './install.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -28,3 +28,5 @@ self.addEventListener('fetch', event => {
     }
   })());
 });
+
+
