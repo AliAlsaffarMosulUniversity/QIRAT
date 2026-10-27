@@ -1,5 +1,11 @@
 // QIRAT Telegram bridge. No credentials belong in this file.
 import { channelAction, rememberChannel, ChannelError } from './channels.mjs';
+import { administrator, adminRequest, telegramVerification, whatsappVerification } from './administrators.mjs';
+async function lookupFirebaseUser(token,env) {
+  const apiKey=env.FIREBASE_WEB_API_KEY||'AIzaSyB-opp6w-TfZCvfHNmXc_o3CMR6mjOkvdQ';
+  const response=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key='+encodeURIComponent(apiKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:token}),signal:AbortSignal.timeout(12000)});
+  return response.ok?(await response.json()).users?.[0]:null;
+}
 const encoder = new TextEncoder();
 const tokenCache = new Map();
 const numeric = text => String(text || '').replace(/[٠-٩]/g, c => String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776));
@@ -244,7 +250,9 @@ export async function channelsRequest(request,env,dependencies={}){
       return r.ok?(await r.json()).users?.[0]:null;
     });
     const user=await lookupUser(token);
-    if(!user?.localId||!user.emailVerified||user.email!=='ali_alsaffar@uomosul.edu.iq'||!user.providerUserInfo?.some(p=>p.providerId==='google.com'))return respond({error:'administrator_required'},403);
+    if(!user?.localId||!user.emailVerified||!user.providerUserInfo?.some(p=>p.providerId==='google.com'))return respond({error:'administrator_required'},403);
+    const store=await (dependencies.makeStore|| (async()=>new Store(env,await accessToken(env))))();
+    if(!await administrator(user,store))return respond({error:'administrator_required'},403);
     const multipart=/^multipart\/form-data\b/i.test(request.headers.get('Content-Type')||'');
     const max=multipart?6*1024*1024:16000;
     if(Number(request.headers.get('Content-Length')||0)>max)return respond({error:'too_large'},413);
@@ -261,7 +269,6 @@ export async function channelsRequest(request,env,dependencies={}){
       }else body=JSON.parse(await bytes.text());
     }catch{return respond({error:'invalid_request'},400);}
     if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'invalid_request'},400);
-    const store=await (dependencies.makeStore|| (async()=>new Store(env,await accessToken(env))))();
     return respond(await channelAction(body,env,store,dependencies.api|| ((method,body)=>telegram(env,method,body))));
   }catch(error){
     if(error instanceof ChannelError)return respond({error:error.message},error.status);
@@ -273,6 +280,8 @@ export default {
   async fetch(request,env) {
     env={...env,FIREBASE_PROJECT_ID:env.FIREBASE_PROJECT_ID||'qirat-6f86e'};
     const url=new URL(request.url);
+    if(url.pathname==='/administrators')return adminRequest(request,{...env,APP_URL:env.APP_URL||'https://alialsaffarmosuluniversity.github.io/QIRAT/'},{lookupUser:token=>lookupFirebaseUser(token,env),makeStore:async()=>new Store(env,await accessToken(env))});
+    if(url.pathname==='/whatsapp-verification')return whatsappVerification(request,env,async()=>new Store(env,await accessToken(env)));
     if(url.pathname==='/channels')return channelsRequest(request,env);
     if(url.pathname==='/visitors')return visitorRequest(request,env);
     if(url.pathname==='/register-user')return registerRequest(request,env);
@@ -296,6 +305,9 @@ export default {
       if(!equal(request.headers.get('X-Telegram-Bot-Api-Secret-Token'),env.TELEGRAM_WEBHOOK_SECRET))return output('Forbidden',403);
       const raw=await request.text();if(raw.length>65536)return output('Too large',413);
       let update;try{update=JSON.parse(raw)}catch{return output('Invalid JSON',400)}
+      if(env.FIREBASE_SERVICE_ACCOUNT_JSON && (update.message?.contact || (update.message?.text?.startsWith('/start') && update.message.text.includes('qv_')))){
+        if(await telegramVerification(update,env,new Store(env,await accessToken(env)),(method,body)=>telegram(env,method,body)))return output('OK');
+      }
       if(update.my_chat_member?.chat?.type==='channel'){
         if(!env.FIREBASE_SERVICE_ACCOUNT_JSON)return output('Configuration required',503);
         await rememberChannel(update,env,new Store(env,await accessToken(env)));return output('OK');
@@ -313,3 +325,5 @@ export default {
     } catch{console.error('QIRAT bridge request failed');return output('تعذر إكمال العملية. أعد المحاولة لاحقاً.',503);}
   }
 };
+
+

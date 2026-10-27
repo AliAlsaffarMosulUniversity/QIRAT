@@ -4,9 +4,23 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
-    function isAdmin() {
+    function isOriginalAdmin() {
       return signedIn() && request.auth.token.email_verified == true
-        && request.auth.token.email == 'ali_alsaffar@uomosul.edu.iq';
+        && request.auth.token.email.lower() == 'ali_alsaffar@uomosul.edu.iq';
+    }
+    function isAdmin() {
+      return isOriginalAdmin() || (signedIn() && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/_qiratAdmins/$(request.auth.token.email.lower()))
+        && get(/databases/$(database)/documents/_qiratAdmins/$(request.auth.token.email.lower())).data.active == true
+        && get(/databases/$(database)/documents/_qiratAdmins/$(request.auth.token.email.lower())).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/_qiratAdmins/$(request.auth.token.email.lower())).data.whatsappVerified == true
+        && get(/databases/$(database)/documents/_qiratAdmins/$(request.auth.token.email.lower())).data.telegramVerified == true);
+    }
+    // Roles and identity proofs can only be written by the trusted server.
+    match /_qiratAdmins/{email} {
+      allow get: if signedIn() && request.auth.token.email_verified == true
+        && email == request.auth.token.email.lower();
+      allow list, create, update, delete: if false;
     }
     function validAnnouncement(id) {
       let d = request.resource.data;
@@ -41,5 +55,7 @@ service cloud.firestore {
     }
   }
 }
+
+
 
 

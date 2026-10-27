@@ -55,10 +55,12 @@ vm.runInContext(read('install.js'),context);
   await activation;
   assert.deepEqual(removed,['qirat-shell-v0']);
   const firebase = read('firebase.js');
-  const roleLine = firebase.split('\n').find(line=>line.startsWith('export const isAdministrator = '));
-  const role = vm.runInNewContext(roleLine.replace('export const isAdministrator = ','').replace(/;$/,''));
+  const roleLines = firebase.split('\n').filter(line=>line.startsWith('export const isAdministrator = ')||line.startsWith('export const isOriginalAdministrator = '));
+  const role = vm.runInNewContext(roleLines.map(line=>line.replace('export const ','const ')).join('\n')+'\nisAdministrator', {administratorUid:'',auth:{currentUser:null}});
   assert.equal(role({email:'ali_alsaffar@uomosul.edu.iq',emailVerified:true,providerData:[{providerId:'google.com'}]}),true);
   assert.equal(role({email:'ali_alsaffar@uomosul.edu.iq',emailVerified:false,providerData:[{providerId:'google.com'}]}),false);
   assert.equal(role({email:'other@example.com',emailVerified:true,providerData:[{providerId:'google.com'}]}),false);
   console.log('PASS: install flow, icon sizes, offline navigation, cache scope, verified administrator identity');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+

@@ -14,7 +14,20 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const announcements = collection(db, 'announcements');
 const validId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-export const watchAuth = callback => onAuthStateChanged(auth, callback);
+let administratorUid = '', roleStop = null;
+export const watchAuth = callback => {
+  const stop = onAuthStateChanged(auth,user=>{
+    roleStop?.();roleStop=null;administratorUid='';callback(user);
+    if(!user || isOriginalAdministrator(user) || !user.emailVerified)return;
+    roleStop=onSnapshot(doc(db,'_qiratAdmins',user.email.trim().toLowerCase()),snapshot=>{
+      if(auth.currentUser?.uid!==user.uid)return;
+      const d=snapshot.exists()?snapshot.data():null;
+      const next=d?.active===true&&d.uid===user.uid&&d.email===user.email.trim().toLowerCase()&&d.whatsappVerified===true&&d.telegramVerified===true?user.uid:'';
+      if(next!==administratorUid){administratorUid=next;callback(user);}
+    },()=>{if(auth.currentUser?.uid===user.uid&&administratorUid){administratorUid='';callback(user);}});
+  });
+  return ()=>{stop();roleStop?.();roleStop=null;administratorUid='';};
+};
 export const signIn = () => signInWithPopup(auth, new GoogleAuthProvider());
 export const signOut = () => firebaseSignOut(auth);
 export const watchAnnouncements = (callback, onError) => onSnapshot(
@@ -42,7 +55,16 @@ export async function deleteAnnouncement(id) {
   return deleteDoc(doc(announcements, id));
 }
 
-export const isAdministrator = user => !!user && user.emailVerified === true && user.email === 'ali_alsaffar@uomosul.edu.iq' && user.providerData?.some(p => p.providerId === 'google.com');
+export const isOriginalAdministrator = user => !!user && user.emailVerified === true && user.email?.toLowerCase() === 'ali_alsaffar@uomosul.edu.iq' && user.providerData?.some(p => p.providerId === 'google.com');
+export const isAdministrator = user => !!user && user.emailVerified === true && user.providerData?.some(p=>p.providerId==='google.com') && (isOriginalAdministrator(user) || (user.uid===administratorUid && auth.currentUser?.uid===user.uid));
+export async function administratorRequest(body) {
+  if(!auth.currentUser)throw new Error('sign_in_required');
+  const token=await auth.currentUser.getIdToken();
+  const response=await fetch('https://qirat-telegram-bot.anaqatal-rafidain.workers.dev/administrators',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  let data;try{data=await response.json();}catch{throw new Error('administration_unavailable');}
+  if(!response.ok)throw new Error(data.error||'administration_unavailable');
+  return data;
+}
 export async function telegramChannelRequest(body) {
   if (!isAdministrator(auth.currentUser)) throw new Error('administrator_required');
   const token = await auth.currentUser.getIdToken();
@@ -77,4 +99,6 @@ export async function registerCurrentUser(){
   if(!response.ok)throw new Error('Member registration unavailable');
   return response.json();
 }
+
+
 
